@@ -12,7 +12,7 @@ export default function AuthNavigation() {
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/auth/logout", { method: "POST" });
       clearIsAuth();
       router.push("/sign-in");
     } catch (err) {

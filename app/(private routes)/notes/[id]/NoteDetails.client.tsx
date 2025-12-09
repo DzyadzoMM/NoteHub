@@ -1,32 +1,71 @@
-"use client";
-import css from "./NoteDetails.module.css";
-import { useQuery } from "@tanstack/react-query";
-import { useParams } from 'next/navigation';
-import { fetchNoteById } from "@/lib/api/clientApi";
+import { QueryClient, HydrationBoundary, dehydrate } from "@tanstack/react-query";
+import { fetchNoteById } from "@/lib/api/serverApi"; // Припускаємо, що це API для сервера
+import NoteDetailsClient from "./NoteDetails.client";
+import { Metadata } from "next";
 
-export default function NoteDetailsClient() {
-    const { id } = useParams<{ id: string }>();
+type Props = {
+  params: { id: string };
+};
 
-    
-  const { data: note, isLoading, error } = useQuery({
+// 💡 Примітка: Я прибрав 'Promise<...>' з типу Props, оскільки в App Router 'params' вже є об'єктом.
+// Якщо ви отримуєте 'undefined' у generateMetadata, то проблема, ймовірно, у вашому fetchNoteById(id).
+// Я також прибрав 'await' перед 'params', оскільки він вже деструктурується.
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = params
+  
+  // 🛑 Важлива перевірка для generateMetadata
+  if (!id) {
+    return { title: 'Note Not Found' };
+  }
+  
+  try {
+    const note = await fetchNoteById(id)
+    return {
+      title: `Note: ${note.title}`,
+      description: note.content.slice(0, 30),
+      openGraph: {
+        title: `Note: ${note.title}`,
+        description: note.content.slice(0, 30),
+        url: `https://08-zustand-ten-mu.vercel.app/${id}`,
+        images: [
+          {
+            url: "https://ac.goit.global/fullstack/react/notehub-og-meta.jpg",
+            width: 1200,
+            height: 630,
+            alt: "Note Hub Foto",
+          },
+        ],
+      },
+    }
+  } catch (error) {
+     return { title: 'Note Not Found' };
+  }
+}
+
+export default async function NoteDetails({ params }: Props) {
+  const { id } = params;
+  const queryClient = new QueryClient();
+
+  // 🛑 Запобігання префетчингу з undefined ID
+  if (!id) {
+    // Тут можна рендерити сторінку помилки або порожній вміст
+    return (
+      <div style={{ padding: '20px', textAlign: 'center' }}>
+        Invalid Note ID provided.
+      </div>
+    );
+  }
+
+  // Префетчинг даних на сервері
+  await queryClient.prefetchQuery({
     queryKey: ["note", id],
     queryFn: () => fetchNoteById(id),
-    refetchOnMount: false,
   });
 
-  if (isLoading) return <p style={{display: "flex",  justifyContent: "center"}}>Loading, please wait...</p>;
-
-  if (error || !note) return <p style={{display: "flex",  justifyContent: "center"}}>Something went wrong.</p>;
-
-    return (
-    <div className={css.container}>
-	<div className={css.item}>
-	  <div className={css.header}>
-        <h2>{note.title}</h2>
-	  </div>
-	  <p className={css.content}>{note.content}</p>
-	  <p className={css.date}>{note.createdAt}</p>
-	</div>
-</div>
-)
-}
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <NoteDetailsClient />
+    </HydrationBoundary>
+  );
+};
